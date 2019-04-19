@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=20
 #SBATCH --time=30:00:00
 #SBATCH --partition=standard
-#SBATCH --account=alzgen
+#SBATCH --account=xxx
 #SBATCH --mem=100000
 
 module load fastqc
