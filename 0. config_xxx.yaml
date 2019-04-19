@@ -1,0 +1,18 @@
+samples:
+    - 1911c_48I
+    - 1911c_48J
+    - 1911c_48K
+    - 1911c_48L
+    - 1911c_24I
+    - 1911c_24J
+    - 1911c_24K
+    - 1911c_24L
+    
+directions:
+    - 1
+    - 2
+    
+stages:
+    - merged
+    - filtered
+    - trimmed

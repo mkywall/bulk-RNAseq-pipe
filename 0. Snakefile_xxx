@@ -1,0 +1,97 @@
+
+configfile: "config_xxx.yaml"
+
+rule all: 
+    input: 
+      expand("{sample}_transcripts_quan", sample = config['samples'])
+
+rule unzip: 
+    input:
+	    "reads/{sample}_1.fastq.gz", 
+	    "reads/{sample}_2.fastq.gz" 
+    output: 
+	    "reads/{sample}_1.fastq", 
+            "reads/{sample}_2.fastq"
+    shell: 
+	    "gunzip {input}"      
+
+rule fastqc1: 
+    input: 
+      expand("reads/{sample}_{direc}.fastq.gz", sample = config['samples'], direc = config['directions'])
+    output: 
+        expand("merged_quality_control/{sample}_{direc}_fastqc.zip",sample = config['samples'], direc = config['directions'])
+    log: 
+      "fastqc.log"
+    shell: 
+        "fastqc {input} --outdir=./merged_quality_control"
+
+rule filter: 
+    input: 
+	    "reads/{sample}_1.fastq.gz",
+	    "reads/{sample}_2.fastq.gz"
+    output: 
+	    "filtered/{sample}_1_cf.fq.gz",
+	    "filtered/{sample}_2_cf.fq.gz"
+    run:
+        def filt(i):
+          infile = input[i]
+          outfile = output[i]
+          cmd = "zcat -c {infile} | grep -A 3 '^@.*[^:]*:N:[^:]*:' | grep -v '^\-\-$' |gzip -c > {outfile}"
+          shell(cmd)
+        l = [0,1]
+        [filt(f) for f in l]
+      
+rule fastqc2: 
+    input: 
+        expand("filtered/{sample}_{direc}_cf.fq.gz", sample = config['samples'], direc = config['directions'])
+    output: 
+        expand("filtered_quality_control/{sample}_{direc}_fastqc.zip", sample = config['samples'], direc = config['directions'])
+    shell: 
+        "fastqc {input[0]} {input[1]}  --outdir=./filtered_quality_control"	
+
+
+rule trim: 
+    input: 
+        "filtered/{sample}_1_cf.fq.gz",
+	      "filtered/{sample}_2_cf.fq.gz",
+        
+    output: 
+        "trim_results/{sample}_1_P.fastq", 
+	    "trim_results/{sample}_1_UP.fastq",
+	    "trim_results/{sample}_2_P.fastq",
+	    "trim_results/{sample}_2_UP.fastq"
+    shell: 
+        "trimmomatic PE -phred33 {input[0]} {input[1]} {output[0]} {output[1]} {output[2]} {output[3]} ILLUMINACLIP:TruSeq3-PE.fa:2:30:10 LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:36"
+
+rule fastqc3: 
+    input: 
+        expand("trim_results/{sample}_{direc}_P.fastq", sample = config['samples'], direc = config['directions']),
+    output: 
+        expand("trimmed_quality_control/{sample}_{direc}_fastqc.zip", sample = config['samples'], direc = config['directions'])
+    shell: 
+        "fastqc {input[0]} {input[1]} --outdir=./trimmed_quality_control"
+
+rule buildindex: 
+    input: 
+        "mouse_index/gencode.vM17.transcripts.fa"
+    output: 
+        "transcripts_index"
+    shell: 
+        "salmon index -t {input} -i {output} --type quasi -k 31"
+
+rule quantify_reads: 
+    input: 
+        index = "transcripts_index",
+        fwd = expand("trim_results/{sample}_1_P.fastq", sample = config['samples']),
+        rev = expand("trim_results/{sample}_2_P.fastq", sample = config['samples'])
+    output: 
+        expand("{sample}_transcripts_quan", sample = config['samples'])
+
+    run: 
+        for f in range(len(input.fwd)):
+            index = input.index
+            fwd_read = input.fwd[f]
+            rev_read = input.rev[f]
+            out_file = output[f]
+            cmd = "salmon quant -i {index} -l A -1 {fwd_read} -2 {rev_read} -o {out_file}"
+            shell(cmd)
